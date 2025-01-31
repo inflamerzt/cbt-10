@@ -4,59 +4,6 @@
 .equ	B	= 80			; порог для ускорения счета
 .equ	C	= 615			; K для счетчика ((кол.сек для накопления имп.,кол.которых равно фону в мкр/ч)*100)
 
-/* additional definitions */
-.equ LEDPORT = PORTB; LED PORT
-.equ LEDPIN = PB6; LED PIN, high inactive
-.equ BUZZPORT = PORTB; BUZZER PORT
-.equ BUZZPIN = PB7; BUZZER PIN
-
-.def TMP = R16;
-
-;------------------------example--------------------
-;.MACRO SUBI16 ; Start macro definition
-;subi @1,low(@0) ; Subtract low byte
-;sbci @2,high(@0) ; Subtract high byte
-;.ENDMACRO ; End macro definition
-;.CSEG ; Start code segment
-;SUBI16 0x1234,r16,r17 ; Sub.0x1234 from r17:r1
-;---------------------------------------------------
-
-;decrement from word
-.macro decw ;decw RgL
-SBIW @0,1
-.endmacro
-
-;stores word to memory
-.macro stsw ; stsw mem_pointer, RgL,RgH 
-	sts @0, @1
-	sts @0+1, @2
-.endmacro
-
-;loads word from memory
-.macro ldsw ; ldsw mem_pointer, RgL,RgH 
-	lds @1, @0
-	lds @2, @0+1
-.endmacro
-
-
-.macro tim2start
-	push TMP
-	ldi TMP, (1<<CS20) ;(1<<CS20) | (1<<CS21) | (1<<CS22) ;runing clock /1024
-	sts TCCR2B, TMP
-	pop TMP
-.endmacro
-
-
-.macro tim2stop
-	;ldi TMP, (1<<CS20); | (1<<CS21) | (1<<CS22) ;runing clock /1024
-	push TMP
-	clr TMP
-	sts TCCR2B, TMP
-	pop TMP
-.endmacro
-
-/* end section */
-
 .DSEG
 Timeout_high:	.byte	1
 Timeout_low:	.byte	1
@@ -121,124 +68,38 @@ MetkaRAID:		.byte	1
 NOP_byte:		.byte	1
 
 
-;------------- New Data variables --------------
-
-
-buz_tim:	.byte 2 ; number of periods to buzz
-test: .byte 1
-
-
-;-----------------------------------------------
-
 .CSEG
 .ORG $0000
-
-	rjmp	reset				;rjmp RESET ; Reset Handler
-		reti ;rjmp EXT_INT0 ; IRQ0 Handler
-	rjmp	INT_Shelchok		;rjmp EXT_INT1 ; IRQ1 Handler
-		reti ;rjmp PCINT0 ; PCINT0 Handler
-		reti ;rjmp PCINT1 ; PCINT1 Handler
-		reti ;rjmp PCINT2 ; PCINT2 Handler
-		reti ;rjmp WDT ; Watchdog Timer Handler
-		reti ;rjmp buzz_switch ;rjmp TIM2_COMPA ; Timer2 Compare A Handler
-		reti ;rjmp TIM2_COMPB ; Timer2 Compare B Handler
-	reti rjmp	buzz_beep			;rjmp TIM2_OVF ; Timer2 Overflow Handler
-		reti ;rjmp TIM1_CAPT ; Timer1 Capture Handler
-		reti ;rjmp TIM1_COMPA ; Timer1 Compare A Handler
-	rjmp	Dergati_IRF840		;rjmp TIM1_COMPB ; Timer1 Compare B Handler
-		reti ;rjmp TIM1_OVF ; Timer1 Overflow Handler
-		reti ;rjmp TIM0_COMPA ; Timer0 Compare A Handler
-		reti ;rjmp TIM0_COMPB ; Timer0 Compare B Handler
-		reti ;rjmp TIM0_OVF ; Timer0 Overflow Handler
-		reti ;rjmp SPI_STC ; SPI Transfer Complete Handler
-		reti ;rjmp USART_RXC ; USART, RX Complete Handler
-		reti ;rjmp USART_UDRE ; USART, UDR Empty Handler
-		reti ;rjmp USART_TXC ; USART, TX Complete Handler
-		reti ;rjmp ADC ; ADC Conversion Complete Handler
-		reti ;rjmp EE_RDY ; EEPROM Ready Handler
-		reti ;rjmp ANA_COMP ; Analog Comparator Handler
-		reti ;rjmp TWI ; 2-wire Serial Interface Handler
-		reti ;rjmp SPM_RDY ; Store Program Memory Ready Handler
-
-/*
 	rjmp	reset
 
-//.ORG $0002		; INT1 External Interrupt Request 1
+.ORG $0002		; INT1 External Interrupt Request 1
 	rjmp	INT_Shelchok
 
-//.ORG $0003		; PCINT0 Handler
+.ORG $0003		; PCINT0 Handler
 	reti
 
-//.ORG $0004		; PCINT1 Handler
+.ORG $0004		; PCINT1 Handler
 	reti
 
-//.ORG $000C		; TIMER1_COMPB Timer/Counter1 Compare Match B
+.ORG $000C		; TIMER1_COMPB Timer/Counter1 Compare Match B
 	rjmp	Dergati_IRF840
 
-*/
-//.ORG $001A
-
-;-----------------interrupts funcitons--------------------
-
-buzz_beep:
-	push Xl
-	lds Xl,buz_tim
-	inc Xl
-	cpi Xl,0x40
-	brne nr_cont
-	clr Xl
-  nr_cont:
-	sbrc Xl,5
-	sbi BUZZPORT,BUZZPIN
-	sbrs Xl,5
-	cbi BUZZPORT,BUZZPIN
-	pop Xl
-	reti
-
-buzz_beep_old:
-	push Xl
-	push Xh
-	ldsw buz_tim,Xl,Xh
-	TST Xh
-	brne make_some_noise
-	TST Xl
-	brne make_some_noise
-	;disable signals
-	cbi BUZZPORT,BUZZPIN
-	sbi LEDPORT,LEDPIN
-	tim2stop
-	rjmp exit_buz
-  make_some_noise:
-	sbiw Xl:Xh, 1
-	stsw buz_tim,Xl,Xh
-	sbrs Xh,3 // temporary mute for short beeps
-	sbi BUZZPORT,BUZZPIN
-	;cbi LEDPORT,LEDPIN	
-  exit_buz:
-	pop Xh
-	pop Xl
-	reti
-
-
-	/*
-buzz_switch:
-	cbi BUZZPORT,BUZZPIN
-	reti
-	*/
-;---------------------------------------------------------
 INT_Shelchok:
 	set							; установить флаг T
 	in		r3, SREG
 	adiw	r26, 1
-	brne	no_adiw_high_bytes
+	breq	adiw_high_bytes
+	out		SREG, r3
+	reti
+adiw_high_bytes:
 	adiw	r28, 1
-no_adiw_high_bytes:
 	out		SREG, r3
 	reti
 
 ;---------------------------------------------------------------
 
 Dergati_IRF840:
+	reti
 	push	r23
 	push	r24
 	push	r25
@@ -360,8 +221,6 @@ ne_plus_1sec:
 	sts		Time2000_low, r24
 	sts		Time2000_high, r25
 
-	/* sound control section */
-/*
 	lds		r24, Schetchik_Zvuka
 	dec		r24
 	brne	ne_Shelchok
@@ -371,8 +230,6 @@ ne_plus_1sec:
 	andi	r23, 0b10111111		; сбросить флаг Т
 	lds		r24, Uroven_Zvuka
 	sts		Schetchik_Zvuka, r24
-
-
 ne_Shelchok:
 	lds		r24, Schetchik_Zvuka
 	dec		r24
@@ -387,11 +244,10 @@ pisk_inv:
 	sbi		PORTB, DDB6			; подтяжка PISK2
 	cbi		PORTB, DDB7			; к земле PISK1
 ne_Pisk:
-*/
-	/* end seciton */
 
 	lds		r24, Anim_low
 	lds		r25, Anim_high
+
 	sbiw	r24, 1
 	brne	ne_time_Anim
 	ldi		r24, low(500)
@@ -431,46 +287,12 @@ reset:
 
 ;	r26, r27, r28, r29 и r3 - зарезервированы, не трогать вообще!
 
-
 ;--------------------настройка портов----------------------
 
 	ldi		r24, 0b11101100
 	out		DDRB, r24
 	ldi		r24, 0b10100111
 	out		DDRD, r24
-
-	/*
-	setup timer 2 for buzzer & led
-	*/
-	push TMP
-	;ldi TMP, (1<<LEDPIN) | (1<<BUZZPIN)
-	in TMP,LEDPORT
-	sbr TMP,LEDPIN
-	out LEDPORT,TMP
-	;sbi LEDPORT,LEDPIN
-	ldi TMP, (1<<OCIE2B) | (1<<OCIE2A) | (1<<TOIE2) ; enable all interrupts TIMER2
-	sts TIMSK2, TMP
-	ldi TMP, 128
-	sts OCR2A, TMP
-	
-	;ldi TMP, (1<<CS20); | (1<<CS21) | (1<<CS22) ;runing clock /1024
-	;sts TCCR2B, TMP
-
-	;tim2stop
-
-	ldi r16,low(8000)
-	ldi r17,high(8000)
-
-	stsw buz_tim, r16, r17
-	tim2start
-
-	pop TMP
-
-
-
-	
-
-	/* end section */
 
 ;	sbi		DDRD, DDD5			; выход LED
 	ldi		r24, 0
@@ -3101,27 +2923,23 @@ SPI_init:
 ; r24-передоваемый байт
 
 SPI_Write_CMD:
-	cli
 	out		SPCR, r0
 	cbi		PORTB,DDB3			; к земле DO
 	sbi		PORTB,DDB5			; подтяжка CLK
 	cbi		PORTB,DDB5			; к земле CLK
 	out		SPCR, r2			; Master Mode(MSTR), Enable SPI(SPE)
 	out		SPDR, r24
-	sei
 	rcall	clk_18
 	in		r24, SPSR
 	ret
 
 SPI_Write_DATA:
-	cli
 	out		SPCR, r0
 	sbi		PORTB,DDB3			; подтяжка DO
 	sbi		PORTB,DDB5			; подтяжка CLK
 	cbi		PORTB,DDB5			; к земле CLK
 	out		SPCR, r2			; Master Mode(MSTR), Enable SPI(SPE)
 	out		SPDR, r24
-	sei
 	rcall	clk_18
 	in		r24, SPSR
 	ret
